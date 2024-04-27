@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -108,10 +109,16 @@ func (e *DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			e.handlerAllTableNames(w, r)
 			return
 		}
-		if strings.Count(r.URL.Path, "/") == 1 {
+		if strings.Count(r.URL.Path, "/") == 1 && !r.URL.Query().Has("limit") && !r.URL.Query().Has("offset") {
 			slashPos := strings.Index(r.URL.Path, "/")
 			tableName := r.URL.Path[slashPos+1:]
-			e.handlerAllTableRecords(tableName)(w, r)
+			e.handlerAllRecords(tableName)(w, r)
+			return
+		}
+		if strings.Count(r.URL.Path, "/") == 1 && r.URL.Query().Has("limit") && !r.URL.Query().Has("offset") {
+			slashPos := strings.Index(r.URL.Path, "/")
+			tableName := r.URL.Path[slashPos+1:]
+			e.handlerAllRecordsWithLimit(tableName)(w, r)
 			return
 		}
 	}
@@ -144,18 +151,69 @@ func (e *DbExplorer) handlerAllTableNames(w http.ResponseWriter, r *http.Request
 	w.Write(js)
 }
 
-func (e *DbExplorer) handlerAllTableRecords(tableName string) http.HandlerFunc {
+func (e *DbExplorer) handlerAllRecords(tableName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, tableExists := e.TablesInfo[tableName]
 		if !tableExists {
-			resp := map[string]string{"error": "unknown table"}
-			js, _ := json.MarshalIndent(&resp, "", "   ")
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			w.Write(js)
-			return
+			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
 		} else {
+			rows, err := e.getAllRowsFromTable(tableName)
+			if err != nil {
+				e.Logger.Println(err)
+				errResp := map[string]string{"error": err.Error()}
+				js, _ := json.MarshalIndent(&errResp, "", "   ")
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write(js)
+				return
+			}
+			records := map[string]interface{}{"records": rows}
+			response := map[string]interface{}{"response": records}
+			js, _ := json.MarshalIndent(&response, "", "   ")
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(js)
+		}
+	}
+}
 
+func (e *DbExplorer) handlerAllRecordsWithLimit(tableName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, tableExists := e.TablesInfo[tableName]
+		if !tableExists {
+			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
+		} else {
+			qLimit := r.URL.Query().Get("limit")
+			if qLimit == "" {
+				limit := 5
+				rows, err := e.getRowsFromTableByLimit(tableName, limit)
+				if err != nil {
+					sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				records := map[string]interface{}{"records": rows}
+				response := map[string]interface{}{"response": records}
+				js, _ := json.MarshalIndent(&response, "", "   ")
+				w.Header().Set("Content-Type", "application/json")
+				w.Write(js)
+				return
+			} else {
+				lim, err := strconv.Atoi(qLimit)
+				if err != nil {
+					sendJSONErrResponse(w, "bad limit param", http.StatusBadRequest)
+					return
+				}
+				rows, err := e.getRowsFromTableByLimit(tableName, lim)
+				if err != nil {
+					sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				records := map[string]interface{}{"records": rows}
+				response := map[string]interface{}{"response": records}
+				js, _ := json.MarshalIndent(&response, "", "   ")
+				w.Header().Set("Content-Type", "application/json")
+				w.Write(js)
+				return
+			}
 		}
 	}
 }
