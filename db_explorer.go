@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -115,10 +116,23 @@ func (e *DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			e.handlerAllRecords(tableName)(w, r)
 			return
 		}
-		if strings.Count(r.URL.Path, "/") == 1 && r.URL.Query().Has("limit") && !r.URL.Query().Has("offset") {
+		if strings.Count(r.URL.Path, "/") == 1 && r.URL.Query().Has("limit") && !r.URL.Query().Has("offset") { // only limit
 			slashPos := strings.Index(r.URL.Path, "/")
 			tableName := r.URL.Path[slashPos+1:]
 			e.handlerAllRecordsWithLimit(tableName)(w, r)
+			return
+		}
+		if strings.Count(r.URL.Path, "/") == 1 && r.URL.Query().Has("limit") && r.URL.Query().Has("offset") {
+			slashPos := strings.Index(r.URL.Path, "/")
+			tableName := r.URL.Path[slashPos+1:]
+			e.handlerAllRecordsWithLimitAndOffset(tableName)(w, r)
+			return
+		}
+		if strings.Count(r.URL.Path, "/") == 2 {
+			data := strings.Split(strings.TrimLeft(r.URL.Path, "/"), "/")
+			tableName := data[0]
+			id := data[1]
+			e.handlerRecordById(tableName, id)(w, r)
 			return
 		}
 	}
@@ -140,8 +154,21 @@ func NewDbExplorer(db *sql.DB) (*DbExplorer, error) {
 }
 
 func (e *DbExplorer) handlerAllTableNames(w http.ResponseWriter, r *http.Request) {
+	rows, err := e.Db.Query("SHOW TABLES")
+	if err != nil {
+		e.Logger.Println(err)
+		sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	tables := make([]string, 0)
-	for name := range e.TablesInfo {
+	for rows.Next() {
+		var name string
+		err := rows.Scan(&name)
+		if err != nil {
+			e.Logger.Println(err)
+			sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		tables = append(tables, name)
 	}
 	resp := map[string]interface{}{"tables": tables}
@@ -214,6 +241,88 @@ func (e *DbExplorer) handlerAllRecordsWithLimit(tableName string) http.HandlerFu
 				w.Write(js)
 				return
 			}
+		}
+	}
+}
+
+func (e *DbExplorer) handlerAllRecordsWithLimitAndOffset(tableName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, tableExists := e.TablesInfo[tableName]
+		if !tableExists {
+			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
+		} else {
+			qLimit := r.URL.Query().Get("limit")
+			if qLimit == "" {
+				qLimit = "5"
+			}
+			qOffset := r.URL.Query().Get("offset")
+			if qOffset == "" {
+				qOffset = "0"
+			}
+			lim, err := strconv.ParseInt(qLimit, 10, 64)
+			if err != nil {
+				sendJSONErrResponse(w, "bad limit parameter", http.StatusBadRequest)
+				return
+			}
+			off, err := strconv.ParseInt(qOffset, 10, 64)
+			if err != nil {
+				sendJSONErrResponse(w, "bad offset parameter", http.StatusBadRequest)
+				return
+			}
+			rows, err := e.getRowsFromTableByLimitAndOffset(tableName, lim, off)
+			if err != nil {
+				sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			records := map[string]interface{}{"records": rows}
+			response := map[string]interface{}{"response": records}
+			js, _ := json.MarshalIndent(&response, "", "   ")
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(js)
+			return
+		}
+	}
+}
+
+func (e *DbExplorer) handlerRecordById(tableName string, queryId string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, tableExists := e.TablesInfo[tableName]
+		if !tableExists {
+			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
+		} else {
+			id, err := strconv.ParseInt(queryId, 10, 64)
+			if err != nil {
+				sendJSONErrResponse(w, "bad id value", http.StatusBadRequest)
+				return
+			}
+			row, err := e.getRowFromTableById(tableName, id)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					sendJSONErrResponse(w, "record not found", http.StatusNotFound)
+					return
+				} else {
+					sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
+			record := map[string]interface{}{"record": row}
+			response := map[string]interface{}{"response": record}
+			js, _ := json.MarshalIndent(&response, "", "   ")
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(js)
+			return
+		}
+	}
+}
+
+func (e *DbExplorer) handlerAddRecordToTable(tableName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		record := make(map[string]interface{})
+		err := json.NewDecoder(r.Body).Decode(&record)
+		if err != nil {
+			e.Logger.Println(err)
+			sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
 }
