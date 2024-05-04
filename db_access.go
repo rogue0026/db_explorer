@@ -1,7 +1,10 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -134,6 +137,53 @@ func (e *DbExplorer) getRowFromTableById(tableName string, id int64) (map[string
 	return result, nil
 }
 
-func (e *DbExplorer) addRowToTable(tableName string, record map[string]interface{}) error {
+func (e *DbExplorer) addRowToTable(tableName string, record map[string]interface{}) (*int64, error) {
+	tableInfo := e.TablesInfo[tableName]
+	columns := make([]string, 0)
+	values := make([]interface{}, 0)
+	placeholders := make([]string, 0)
+	for _, fldInfo := range tableInfo.Fields {
+		_, exists := record[fldInfo.Field]
+		if exists {
+			if fldInfo.Key == "PRI" {
+				continue
+			}
+			columns = append(columns, fldInfo.Field)
+			values = append(values, record[fldInfo.Field])
+			placeholders = append(placeholders, "?")
+		}
+	}
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tableName, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+	result, err := e.Db.Exec(query, values...)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	lastId, _ := result.LastInsertId()
 
+	return &lastId, nil
+}
+
+func (e *DbExplorer) updateRecordTable(tableName string, id int64, inRecord map[string]interface{}) *Response {
+	tableInfo := e.TablesInfo[tableName]
+	row, err := e.getRowFromTableById(tableName, id)
+	if err != nil {
+		resp := Response{}
+		if errors.Is(err, sql.ErrNoRows) {
+			resp.Err = err
+			resp.StatusCode = http.StatusNotFound
+		} else {
+			resp.Err = err
+			resp.StatusCode = http.StatusInternalServerError
+		}
+		return &resp
+	}
+	for _, fldInfo := range tableInfo.Fields {
+		val, exists := inRecord[fldInfo.Field]
+		if exists {
+
+		}
+	}
+
+	return nil
 }

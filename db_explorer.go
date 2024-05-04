@@ -32,6 +32,12 @@ type TableInfo struct {
 	Fields    []*FieldInfo
 }
 
+func (ti *TableInfo) getFieldByName(name string) *FieldInfo {
+	for i := range ti.Fields {
+		if ti.Fields[i] == name
+	}
+}
+
 func GetTableNames(db *sql.DB) ([]string, error) {
 	sqlQuery := "SHOW TABLES"
 	rows, err := db.Query(sqlQuery)
@@ -135,6 +141,15 @@ func (e *DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			e.handlerRecordById(tableName, id)(w, r)
 			return
 		}
+	case http.MethodPut:
+		tableName := strings.Trim(r.URL.Path, "/")
+		e.handlerAddRecordToTable(tableName)(w, r)
+		return
+	case http.MethodPost:
+		//data := strings.Split(strings.TrimLeft(r.URL.Path, "/"), "/")
+		//tableName := data[0]
+		//id := data[1]
+		//e.handlerUpdateRecord(tableName, id)
 	}
 }
 
@@ -317,12 +332,67 @@ func (e *DbExplorer) handlerRecordById(tableName string, queryId string) http.Ha
 
 func (e *DbExplorer) handlerAddRecordToTable(tableName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		_, exists := e.TablesInfo[tableName]
+		if !exists {
+			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
+			return
+		} else {
+			record := make(map[string]interface{})
+			err := json.NewDecoder(r.Body).Decode(&record)
+			if err != nil {
+				e.Logger.Println(err)
+				sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			lastInsertId, err := e.addRowToTable(tableName, record)
+			if err != nil {
+				//e.Logger.Println(err)
+				sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			id := map[string]interface{}{"id": lastInsertId}
+			response := map[string]interface{}{"response": id}
+			js, _ := json.MarshalIndent(&response, "", "   ")
+			w.Write(js)
+			return
+		}
+	}
+}
+
+type Response struct {
+	Err        error
+	StatusCode int
+}
+
+func (e *DbExplorer) handlerUpdateRecord(tableName string, queryId string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, exists := e.TablesInfo[tableName]
+		if !exists {
+			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
+			return
+		}
+		id, err := strconv.ParseInt(queryId, 10, 64)
+		if err != nil {
+			sendJSONErrResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		record := make(map[string]interface{})
-		err := json.NewDecoder(r.Body).Decode(&record)
+		err = json.NewDecoder(r.Body).Decode(&record)
 		if err != nil {
 			e.Logger.Println(err)
 			sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		resp := e.updateRecordTable(tableName, id, record)
+		if resp.Err != nil {
+			e.Logger.Println(err)
+			sendJSONErrResponse(w, resp.Err.Error(), resp.StatusCode)
+			return
+		}
+		upd := map[string]interface{}{"updated": 1}
+		wrapped := map[string]interface{}{"response": upd}
+		js, _ := json.MarshalIndent(&wrapped, "", "   ")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(js)
 	}
 }

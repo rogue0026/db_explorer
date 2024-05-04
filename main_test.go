@@ -105,7 +105,7 @@ func TestApis(t *testing.T) {
 	ts := httptest.NewServer(handler)
 
 	cases := []Case{
-		Case{
+		Case{ // 0
 			Path: "/", // список таблиц
 			Result: CR{
 				"response": CR{
@@ -113,14 +113,14 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 1
 			Path:   "/unknown_table",
 			Status: http.StatusNotFound,
 			Result: CR{
 				"error": "unknown table",
 			},
 		},
-		Case{
+		Case{ // 2
 			Path: "/items",
 			Result: CR{
 				"response": CR{
@@ -141,7 +141,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 3
 			Path:  "/items",
 			Query: "limit=1",
 			Result: CR{
@@ -157,7 +157,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 4
 			Path:  "/items",
 			Query: "limit=1&offset=1",
 			Result: CR{
@@ -173,7 +173,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 5
 			Path: "/items/1",
 			Result: CR{
 				"response": CR{
@@ -186,7 +186,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 6
 			Path:   "/items/100500",
 			Status: http.StatusNotFound,
 			Result: CR{
@@ -195,7 +195,7 @@ func TestApis(t *testing.T) {
 		},
 
 		// тут идёт создание и редактирование
-		Case{
+		Case{ // 7
 			Path:   "/items/",
 			Method: http.MethodPut,
 			Body: CR{
@@ -212,7 +212,7 @@ func TestApis(t *testing.T) {
 		// это пример хрупкого теста
 		// если много раз вызывать один и тот же тест - записи будут добавляться
 		// поэтому придётся сделать сброс базы каждый раз в PrepareTestData
-		Case{
+		Case{ // 8
 			Path: "/items/3",
 			Result: CR{
 				"response": CR{
@@ -225,7 +225,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 9
 			Path:   "/items/3",
 			Method: http.MethodPost,
 			Body: CR{
@@ -237,7 +237,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 10
 			Path: "/items/3",
 			Result: CR{
 				"response": CR{
@@ -252,7 +252,7 @@ func TestApis(t *testing.T) {
 		},
 
 		// обновление null-поля в таблице
-		Case{
+		Case{ // 11
 			Path:   "/items/3",
 			Method: http.MethodPost,
 			Body: CR{
