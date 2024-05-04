@@ -264,7 +264,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 12
 			Path: "/items/3",
 			Result: CR{
 				"response": CR{
@@ -279,7 +279,7 @@ func TestApis(t *testing.T) {
 		},
 
 		// обновление null-поля в таблице
-		Case{
+		Case{ // 13
 			Path:   "/items/3",
 			Method: http.MethodPost,
 			Body: CR{
@@ -291,7 +291,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 14
 			Path: "/items/3",
 			Result: CR{
 				"response": CR{
@@ -306,7 +306,7 @@ func TestApis(t *testing.T) {
 		},
 
 		// ошибки
-		Case{
+		Case{ // 15
 			Path:   "/items/3",
 			Method: http.MethodPost,
 			Status: http.StatusBadRequest,
@@ -317,7 +317,7 @@ func TestApis(t *testing.T) {
 				"error": "field id have invalid type",
 			},
 		},
-		Case{
+		Case{ // 16
 			Path:   "/items/3",
 			Method: http.MethodPost,
 			Status: http.StatusBadRequest,
@@ -328,7 +328,7 @@ func TestApis(t *testing.T) {
 				"error": "field title have invalid type",
 			},
 		},
-		Case{
+		Case{ // 17
 			Path:   "/items/3",
 			Method: http.MethodPost,
 			Status: http.StatusBadRequest,
@@ -340,7 +340,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 
-		Case{
+		Case{ // 18
 			Path:   "/items/3",
 			Method: http.MethodPost,
 			Status: http.StatusBadRequest,
@@ -353,7 +353,7 @@ func TestApis(t *testing.T) {
 		},
 
 		// удаление
-		Case{
+		Case{ // 19
 			Path:   "/items/3",
 			Method: http.MethodDelete,
 			Result: CR{

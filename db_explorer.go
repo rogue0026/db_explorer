@@ -32,10 +32,13 @@ type TableInfo struct {
 	Fields    []*FieldInfo
 }
 
-func (ti *TableInfo) getFieldByName(name string) *FieldInfo {
+func (ti *TableInfo) getFieldInfoByName(name string) *FieldInfo {
 	for i := range ti.Fields {
-		if ti.Fields[i] == name
+		if ti.Fields[i].Field == name {
+			return ti.Fields[i]
+		}
 	}
+	return nil
 }
 
 func GetTableNames(db *sql.DB) ([]string, error) {
@@ -146,10 +149,11 @@ func (e *DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		e.handlerAddRecordToTable(tableName)(w, r)
 		return
 	case http.MethodPost:
-		//data := strings.Split(strings.TrimLeft(r.URL.Path, "/"), "/")
-		//tableName := data[0]
-		//id := data[1]
-		//e.handlerUpdateRecord(tableName, id)
+		data := strings.Split(strings.TrimLeft(r.URL.Path, "/"), "/")
+		tableName := data[0]
+		id := data[1]
+		e.handlerUpdateRecord(tableName, id)(w, r)
+		return
 	}
 }
 

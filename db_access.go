@@ -165,6 +165,14 @@ func (e *DbExplorer) addRowToTable(tableName string, record map[string]interface
 }
 
 func (e *DbExplorer) updateRecordTable(tableName string, id int64, inRecord map[string]interface{}) *Response {
+	/*
+		1. получить строку из таблицы бд по id
+		2. проходим циклом по полям из строки, полученной от клиента, проверяем, есть ли поле с таким именем в таблице,
+		если есть, то:
+			1) определяем что за тип данных пришел от клиента для текущего поля.
+			2) после определения типа данных сравниваем его с типом данных в таблице бд, если типы совпадают, то можно обновлять данные.
+			3) если от клиента приходит nil, то нужно проверить может ли данное поле иметь значение nil, если может, то меняем значение из таблицы на nil.
+	*/
 	tableInfo := e.TablesInfo[tableName]
 	row, err := e.getRowFromTableById(tableName, id)
 	if err != nil {
@@ -178,12 +186,84 @@ func (e *DbExplorer) updateRecordTable(tableName string, id int64, inRecord map[
 		}
 		return &resp
 	}
-	for _, fldInfo := range tableInfo.Fields {
-		val, exists := inRecord[fldInfo.Field]
+	updRow := make(map[string]interface{})
+	for fldName := range inRecord {
+		_, exists := row[fldName]
 		if exists {
-
+			fldInfo := tableInfo.getFieldInfoByName(fldName)
+			if fldInfo.Key == "PRI" {
+				return &Response{
+					Err:        fmt.Errorf("field %s have invalid type", fldName),
+					StatusCode: http.StatusBadRequest,
+				}
+			}
+			switch inRecord[fldName].(type) {
+			case string:
+				if strings.Contains(fldInfo.Type, "char") || strings.Contains(fldInfo.Type, "text") {
+					updRow[fldName] = inRecord[fldName]
+				} else {
+					return &Response{
+						Err:        fmt.Errorf("field %s have invalid type", fldName),
+						StatusCode: http.StatusBadRequest,
+					}
+				}
+			case int:
+				if strings.Contains(fldInfo.Type, "int") {
+					updRow[fldName] = inRecord[fldName]
+				} else {
+					return &Response{
+						Err:        fmt.Errorf("field %s have invalid type", fldName),
+						StatusCode: http.StatusBadRequest,
+					}
+				}
+			case float32:
+				if strings.Contains(fldInfo.Type, "double") || strings.Contains(fldInfo.Type, "decimal") || strings.Contains(fldInfo.Type, "float") {
+					updRow[fldName] = inRecord[fldName]
+				} else {
+					return &Response{
+						Err:        fmt.Errorf("field %s have invalid type", fldName),
+						StatusCode: http.StatusBadRequest,
+					}
+				}
+			case float64:
+				if strings.Contains(fldInfo.Type, "double") || strings.Contains(fldInfo.Type, "decimal") || strings.Contains(fldInfo.Type, "float") {
+					updRow[fldName] = inRecord[fldName]
+				} else {
+					return &Response{
+						Err:        fmt.Errorf("field %s have invalid type", fldName),
+						StatusCode: http.StatusBadRequest,
+					}
+				}
+			case nil:
+				if fldInfo.Null == "YES" {
+					updRow[fldName] = nil
+				} else {
+					return &Response{
+						Err:        fmt.Errorf("field %s have invalid type", fldName),
+						StatusCode: http.StatusBadRequest,
+					}
+				}
+			}
+		}
+	}
+	columns := make([]string, 0)
+	values := make([]interface{}, 0)
+	for col, val := range updRow {
+		columns = append(columns, fmt.Sprintf("%s = ?", col))
+		values = append(values, val)
+	}
+	query := fmt.Sprintf("UPDATE %s SET %s", tableName, strings.Join(columns, ", "))
+	fmt.Println(query)
+	_, err = e.Db.Exec(query, values...)
+	if err != nil {
+		return &Response{
+			Err:        err,
+			StatusCode: http.StatusInternalServerError,
 		}
 	}
 
-	return nil
+	return &Response{
+		Err:        nil,
+		StatusCode: http.StatusOK,
+	}
 }
