@@ -362,7 +362,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 20
 			Path:   "/items/3",
 			Method: http.MethodDelete,
 			Result: CR{
@@ -371,7 +371,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 21
 			Path:   "/items/3",
 			Status: http.StatusNotFound,
 			Result: CR{
@@ -380,7 +380,7 @@ func TestApis(t *testing.T) {
 		},
 
 		// и немного по другой таблице
-		Case{
+		Case{ // 22
 			Path: "/users/1",
 			Result: CR{
 				"response": CR{
@@ -396,7 +396,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 
-		Case{
+		Case{ // 23
 			Path:   "/users/1",
 			Method: http.MethodPost,
 			Body: CR{
@@ -409,7 +409,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 24
 			Path: "/users/1",
 			Result: CR{
 				"response": CR{
@@ -425,7 +425,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 		// ошибки
-		Case{
+		Case{ // 25
 			Path:   "/users/1",
 			Method: http.MethodPost,
 			Status: http.StatusBadRequest,
@@ -437,7 +437,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 		// не забываем про sql-инъекции
-		Case{
+		Case{ // 26
 			Path:   "/users/",
 			Method: http.MethodPut,
 			Body: CR{
@@ -452,7 +452,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
-		Case{
+		Case{ // 27
 			Path: "/users/2",
 			Result: CR{
 				"response": CR{
@@ -469,7 +469,7 @@ func TestApis(t *testing.T) {
 		},
 		// тут тоже возможна sql-инъекция
 		// если пришло не число на вход - берём дефолтное значене для лимита-оффсета
-		Case{
+		Case{ // 28
 			Path:  "/users",
 			Query: "limit=1'&offset=1\"",
 			Result: CR{

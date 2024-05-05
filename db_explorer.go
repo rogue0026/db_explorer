@@ -41,6 +41,15 @@ func (ti *TableInfo) getFieldInfoByName(name string) *FieldInfo {
 	return nil
 }
 
+func (ti *TableInfo) findPrimKeyName() *string {
+	for _, fldInfo := range ti.Fields {
+		if fldInfo.Key == "PRI" {
+			return &fldInfo.Field
+		}
+	}
+	return nil
+}
+
 func GetTableNames(db *sql.DB) ([]string, error) {
 	sqlQuery := "SHOW TABLES"
 	rows, err := db.Query(sqlQuery)
@@ -153,6 +162,12 @@ func (e *DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		tableName := data[0]
 		id := data[1]
 		e.handlerUpdateRecord(tableName, id)(w, r)
+		return
+	case http.MethodDelete:
+		data := strings.Split(strings.TrimLeft(r.URL.Path, "/"), "/")
+		tableName := data[0]
+		queryId := data[1]
+		e.handlerDeleteRecordFromTable(tableName, queryId)(w, r)
 		return
 	}
 }
@@ -357,6 +372,7 @@ func (e *DbExplorer) handlerAddRecordToTable(tableName string) http.HandlerFunc 
 			id := map[string]interface{}{"id": lastInsertId}
 			response := map[string]interface{}{"response": id}
 			js, _ := json.MarshalIndent(&response, "", "   ")
+			w.Header().Set("Content-Type", "application/json")
 			w.Write(js)
 			return
 		}
@@ -389,14 +405,42 @@ func (e *DbExplorer) handlerUpdateRecord(tableName string, queryId string) http.
 		}
 		resp := e.updateRecordTable(tableName, id, record)
 		if resp.Err != nil {
-			e.Logger.Println(err)
+			//e.Logger.Println(err)
 			sendJSONErrResponse(w, resp.Err.Error(), resp.StatusCode)
 			return
 		}
 		upd := map[string]interface{}{"updated": 1}
 		wrapped := map[string]interface{}{"response": upd}
 		js, _ := json.MarshalIndent(&wrapped, "", "   ")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
+		w.Write(js)
+	}
+}
+
+func (e *DbExplorer) handlerDeleteRecordFromTable(tableName string, queryId string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, exists := e.TablesInfo[tableName]
+		if !exists {
+			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
+			return
+		}
+		id, err := strconv.ParseInt(queryId, 10, 64)
+		if err != nil {
+			e.Logger.Println(err)
+			sendJSONErrResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		rowsAffected, err := e.deleteRecordById(tableName, id)
+		if err != nil {
+			e.Logger.Println(err)
+			sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		deleted := map[string]interface{}{"deleted": rowsAffected}
+		resp := map[string]interface{}{"response": deleted}
+		js, _ := json.MarshalIndent(&resp, "", "   ")
+		w.Header().Set("Content-Type", "application/json")
 		w.Write(js)
 	}
 }

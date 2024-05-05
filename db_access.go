@@ -120,9 +120,11 @@ func (e *DbExplorer) getRowsFromTableByLimitAndOffset(tableName string, limit in
 }
 
 func (e *DbExplorer) getRowFromTableById(tableName string, id int64) (map[string]interface{}, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE id = ?", tableName)
 	tableInfo := e.TablesInfo[tableName]
 	colsCount := len(tableInfo.Fields)
+	primKeyFieldName := tableInfo.findPrimKeyName()
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", tableName, *primKeyFieldName)
 	columns := make([]interface{}, colsCount)
 	columnPointers := make([]interface{}, colsCount)
 	for i := range columnPointers {
@@ -154,6 +156,7 @@ func (e *DbExplorer) addRowToTable(tableName string, record map[string]interface
 		}
 	}
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tableName, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+	fmt.Println(query)
 	result, err := e.Db.Exec(query, values...)
 	if err != nil {
 		fmt.Println(err)
@@ -253,7 +256,7 @@ func (e *DbExplorer) updateRecordTable(tableName string, id int64, inRecord map[
 		values = append(values, val)
 	}
 	query := fmt.Sprintf("UPDATE %s SET %s", tableName, strings.Join(columns, ", "))
-	fmt.Println(query)
+	//fmt.Println(query)
 	_, err = e.Db.Exec(query, values...)
 	if err != nil {
 		return &Response{
@@ -266,4 +269,14 @@ func (e *DbExplorer) updateRecordTable(tableName string, id int64, inRecord map[
 		Err:        nil,
 		StatusCode: http.StatusOK,
 	}
+}
+
+func (e *DbExplorer) deleteRecordById(tableName string, id int64) (*int64, error) {
+	query := fmt.Sprintf("DELETE FROM %s WHERE id = ?", tableName)
+	res, err := e.Db.Exec(query, id)
+	if err != nil {
+		return nil, err
+	}
+	affected, _ := res.RowsAffected()
+	return &affected, nil
 }
