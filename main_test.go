@@ -95,7 +95,7 @@ func TestApis(t *testing.T) {
 	PrepareTestApis(db)
 
 	// возможно вам будет удобно закомментировать это чтобы смотреть результат после теста
-	defer CleanupTestApis(db)
+	//defer CleanupTestApis(db)
 
 	handler, err := NewDbExplorer(db)
 	if err != nil {
@@ -441,7 +441,7 @@ func TestApis(t *testing.T) {
 			Path:   "/users/",
 			Method: http.MethodPut,
 			Body: CR{
-				"user_id":    2,
+				"user_id":    2, // insert into users (login, password) values ('qwerty'', 'love"')
 				"login":      "qwerty'",
 				"password":   "love\"",
 				"unkn_field": "love",

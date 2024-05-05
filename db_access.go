@@ -94,13 +94,15 @@ func (e *DbExplorer) getRowsFromTableByLimit(tableName string, limit int) ([]map
 }
 
 func (e *DbExplorer) getRowsFromTableByLimitAndOffset(tableName string, limit int64, offset int64) ([]map[string]interface{}, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE id > ? LIMIT ?", tableName)
+	tableInfo := e.TablesInfo[tableName]
+	pkName := tableInfo.findPrimKeyName()
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s > ? LIMIT ?", tableName, *pkName)
 	rows, err := e.Db.Query(query, offset, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	tableInfo := e.TablesInfo[tableName]
+
 	colsCount := len(tableInfo.Fields)
 	results := make([]map[string]interface{}, 0)
 	for rows.Next() {
@@ -140,26 +142,74 @@ func (e *DbExplorer) getRowFromTableById(tableName string, id int64) (map[string
 }
 
 func (e *DbExplorer) addRowToTable(tableName string, record map[string]interface{}) (*int64, error) {
+	/*
+		1. создаем пустую мапу на основе информации о полях таблицы
+		2. идем по ключам созданной мапы, смотрим, есть ли в пришедшей мапе значения по ключам в созданной мапе
+		3. если значение есть, то добавляем его (можно еще сделать проверку на nil)
+		4. если значения нет, то проверяем есть ли в таблице значение по умолчанию для данного поля, если значения по умолчанию нет - то нужно дать значение по умолчанию для данного типа
+	*/
+
 	tableInfo := e.TablesInfo[tableName]
+	rowForAdding := make(map[string]interface{})
+	for _, fldInfo := range tableInfo.Fields {
+		if fldInfo.Key == "PRI" {
+			continue
+		}
+		switch {
+		case strings.Contains(fldInfo.Type, "char") || strings.Contains(fldInfo.Type, "text"):
+			if fldInfo.Null == "NO" {
+				rowForAdding[fldInfo.Field] = ""
+			} else {
+				rowForAdding[fldInfo.Field] = nil
+			}
+			v, exists := record[fldInfo.Field]
+			if exists {
+				if val, ok := v.(string); ok {
+					rowForAdding[fldInfo.Field] = val
+				}
+			}
+		case strings.Contains(fldInfo.Type, "int"):
+			if fldInfo.Null == "NO" {
+				rowForAdding[fldInfo.Field] = 0
+			} else {
+				rowForAdding[fldInfo.Field] = nil
+			}
+			v, exists := record[fldInfo.Field]
+			if exists {
+				if val, ok := v.(int); ok {
+					rowForAdding[fldInfo.Field] = val
+				}
+			}
+		case strings.Contains(fldInfo.Type, "double") || strings.Contains(fldInfo.Type, "float") || strings.Contains(fldInfo.Type, "decimal"):
+			if fldInfo.Null == "NO" {
+				rowForAdding[fldInfo.Type] = 0.0
+			} else {
+				rowForAdding[fldInfo.Type] = nil
+			}
+			v, exists := record[fldInfo.Field]
+			if exists {
+				if val, ok := v.(float32); ok {
+					rowForAdding[fldInfo.Field] = val
+				}
+				if val, ok := v.(float64); ok {
+					rowForAdding[fldInfo.Field] = val
+				}
+			}
+		}
+	}
+
 	columns := make([]string, 0)
 	values := make([]interface{}, 0)
 	placeholders := make([]string, 0)
-	for _, fldInfo := range tableInfo.Fields {
-		_, exists := record[fldInfo.Field]
-		if exists {
-			if fldInfo.Key == "PRI" {
-				continue
-			}
-			columns = append(columns, fldInfo.Field)
-			values = append(values, record[fldInfo.Field])
-			placeholders = append(placeholders, "?")
-		}
+	for k, v := range rowForAdding {
+		columns = append(columns, k)
+		values = append(values, v)
+		placeholders = append(placeholders, "?")
 	}
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tableName, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
-	fmt.Println(query)
 	result, err := e.Db.Exec(query, values...)
 	if err != nil {
-		fmt.Println(err)
+
 		return nil, err
 	}
 	lastId, _ := result.LastInsertId()
@@ -168,14 +218,7 @@ func (e *DbExplorer) addRowToTable(tableName string, record map[string]interface
 }
 
 func (e *DbExplorer) updateRecordTable(tableName string, id int64, inRecord map[string]interface{}) *Response {
-	/*
-		1. получить строку из таблицы бд по id
-		2. проходим циклом по полям из строки, полученной от клиента, проверяем, есть ли поле с таким именем в таблице,
-		если есть, то:
-			1) определяем что за тип данных пришел от клиента для текущего поля.
-			2) после определения типа данных сравниваем его с типом данных в таблице бд, если типы совпадают, то можно обновлять данные.
-			3) если от клиента приходит nil, то нужно проверить может ли данное поле иметь значение nil, если может, то меняем значение из таблицы на nil.
-	*/
+
 	tableInfo := e.TablesInfo[tableName]
 	row, err := e.getRowFromTableById(tableName, id)
 	if err != nil {
@@ -256,7 +299,6 @@ func (e *DbExplorer) updateRecordTable(tableName string, id int64, inRecord map[
 		values = append(values, val)
 	}
 	query := fmt.Sprintf("UPDATE %s SET %s", tableName, strings.Join(columns, ", "))
-	//fmt.Println(query)
 	_, err = e.Db.Exec(query, values...)
 	if err != nil {
 		return &Response{

@@ -260,8 +260,7 @@ func (e *DbExplorer) handlerAllRecordsWithLimit(tableName string) http.HandlerFu
 			} else {
 				lim, err := strconv.Atoi(qLimit)
 				if err != nil {
-					sendJSONErrResponse(w, "bad limit param", http.StatusBadRequest)
-					return
+					lim = 5
 				}
 				rows, err := e.getRowsFromTableByLimit(tableName, lim)
 				if err != nil {
@@ -295,16 +294,15 @@ func (e *DbExplorer) handlerAllRecordsWithLimitAndOffset(tableName string) http.
 			}
 			lim, err := strconv.ParseInt(qLimit, 10, 64)
 			if err != nil {
-				sendJSONErrResponse(w, "bad limit parameter", http.StatusBadRequest)
-				return
+				lim = 5
 			}
 			off, err := strconv.ParseInt(qOffset, 10, 64)
 			if err != nil {
-				sendJSONErrResponse(w, "bad offset parameter", http.StatusBadRequest)
-				return
+				off = 0
 			}
 			rows, err := e.getRowsFromTableByLimitAndOffset(tableName, lim, off)
 			if err != nil {
+				e.Logger.Println(err.Error())
 				sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -351,7 +349,7 @@ func (e *DbExplorer) handlerRecordById(tableName string, queryId string) http.Ha
 
 func (e *DbExplorer) handlerAddRecordToTable(tableName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, exists := e.TablesInfo[tableName]
+		tableInfo, exists := e.TablesInfo[tableName]
 		if !exists {
 			sendJSONErrResponse(w, "unknown table", http.StatusNotFound)
 			return
@@ -369,7 +367,8 @@ func (e *DbExplorer) handlerAddRecordToTable(tableName string) http.HandlerFunc 
 				sendJSONErrResponse(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			id := map[string]interface{}{"id": lastInsertId}
+			pkName := tableInfo.findPrimKeyName()
+			id := map[string]interface{}{*pkName: lastInsertId}
 			response := map[string]interface{}{"response": id}
 			js, _ := json.MarshalIndent(&response, "", "   ")
 			w.Header().Set("Content-Type", "application/json")
